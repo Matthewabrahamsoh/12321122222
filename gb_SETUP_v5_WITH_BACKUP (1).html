@@ -1,0 +1,658 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Gratitude Blockchain — ACS(I) 2026 [SETUP]</title>
+  <script>
+/**
+ * STORAGE MANAGER — Reusable Export/Import
+ * (Embedded for portability)
+ */
+class StorageManager {
+  constructor(appName, dataStructure) {
+    this.appName = appName;
+    this.dataStructure = dataStructure;
+    this.storageKey = `${appName}_backup`;
+  }
+
+  save() {
+    try {
+      const backup = {
+        appName: this.appName,
+        version: '1.0',
+        exported: new Date().toISOString(),
+        data: this.dataStructure
+      };
+      const json = JSON.stringify(backup);
+      localStorage.setItem(this.storageKey, json);
+      const size = this._getStorageSize();
+      return { success: true, size: size };
+    } catch (e) {
+      if (e.name === 'QuotaExceededError') {
+        return { success: false, error: 'Storage full. Photos too large.', code: 'QUOTA_EXCEEDED' };
+      }
+      return { success: false, error: e.message };
+    }
+  }
+
+  load() {
+    try {
+      const json = localStorage.getItem(this.storageKey);
+      if (!json) return { success: false, error: 'No backup found' };
+      const backup = JSON.parse(json);
+      return { success: true, data: backup.data, metadata: backup };
+    } catch (e) {
+      return { success: false, error: e.message };
+    }
+  }
+
+  export() {
+    try {
+      const backup = {
+        appName: this.appName,
+        version: '1.0',
+        exported: new Date().toISOString(),
+        data: this.dataStructure
+      };
+      const json = JSON.stringify(backup, null, 2);
+      const blob = new Blob([json], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const dateStr = new Date().toISOString().slice(0, 10);
+      const filename = `${this.appName}_backup_${dateStr}.json`;
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+      return { success: true, filename: filename };
+    } catch (e) {
+      return { success: false, error: e.message };
+    }
+  }
+
+  async import(file) {
+    return new Promise((resolve) => {
+      if (!file) {
+        resolve({ success: false, error: 'No file selected' });
+        return;
+      }
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        try {
+          const backup = JSON.parse(e.target.result);
+          if (!backup.appName || !backup.data) {
+            throw new Error('Invalid backup file format');
+          }
+          Object.assign(this.dataStructure, backup.data);
+          const saveResult = this.save();
+          resolve({
+            success: true,
+            itemsRestored: backup.data.length || Object.keys(backup.data).length
+          });
+        } catch (error) {
+          resolve({ success: false, error: error.message });
+        }
+      };
+      reader.onerror = () => {
+        resolve({ success: false, error: 'Failed to read file' });
+      };
+      reader.readAsText(file);
+    });
+  }
+
+  _getStorageSize() {
+    let total = 0;
+    for (let key in localStorage) {
+      if (localStorage.hasOwnProperty(key)) {
+        total += localStorage[key].length + key.length;
+      }
+    }
+    return total;
+  }
+}
+  </script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700&family=Nunito:ital,wght@0,400;0,600;0,700;1,400&display=swap');
+    *,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+    :root{
+      --deep:#051823;--steel:#4a7fa5;--copper:#c87941;
+      --gold:#e8b84b;--gold2:#f5d780;--sb:#f6c90e;
+      --foam:#d6eef8;--muted:rgba(214,238,248,0.45);
+      --teacher-border:#7bc67e;
+    }
+    html,body{width:100%;min-height:100vh;font-family:'Nunito',sans-serif;overflow-x:hidden;
+      background:radial-gradient(ellipse 80% 50% at 50% 100%,#0a3a55 0%,transparent 70%),
+      linear-gradient(180deg,#020c13 0%,#051823 40%,#071f30 100%);}
+
+    .bg-bubbles{position:fixed;inset:0;pointer-events:none;z-index:0;overflow:hidden;}
+    .bg-bubble{position:absolute;bottom:-60px;border-radius:50%;
+      border:1px solid rgba(214,238,248,0.1);
+      background:radial-gradient(circle at 35% 30%,rgba(214,238,248,0.05) 0%,transparent 70%);
+      animation:rise linear infinite;}
+    @keyframes rise{0%{transform:translateY(0);opacity:0;}10%{opacity:.7;}90%{opacity:.2;}100%{transform:translateY(-110vh) translateX(20px);opacity:0;}}
+    .rays{position:fixed;inset:0;pointer-events:none;z-index:0;
+      background:repeating-linear-gradient(-55deg,transparent 0px,transparent 28px,rgba(13,79,110,.03) 28px,rgba(13,79,110,.03) 32px);
+      animation:caustic 9s ease-in-out infinite alternate;}
+    @keyframes caustic{0%{opacity:.5;}100%{opacity:1;}}
+
+    .setup-badge{position:fixed;top:12px;right:12px;z-index:200;
+      background:linear-gradient(135deg,var(--copper),var(--sb));
+      color:var(--deep);font-family:'Cinzel',serif;font-weight:700;
+      font-size:.65rem;letter-spacing:1.5px;padding:5px 12px;border-radius:20px;
+      box-shadow:0 4px 14px rgba(200,121,65,.4);}
+
+    header{position:relative;z-index:2;text-align:center;padding:44px 24px 10px;}
+    .verse-tag{display:inline-flex;align-items:center;gap:10px;font-family:'Cinzel',serif;
+      font-size:9px;letter-spacing:3.5px;color:var(--sb);opacity:.8;margin-bottom:12px;text-transform:uppercase;}
+    .verse-tag::before,.verse-tag::after{content:'';width:28px;height:1px;
+      background:linear-gradient(90deg,transparent,var(--sb),transparent);}
+    header h1{font-family:'Cinzel',serif;font-size:clamp(1.8rem,5.5vw,3.2rem);font-weight:700;
+      color:var(--foam);line-height:1.15;margin-bottom:6px;text-shadow:0 2px 20px rgba(13,79,110,.8);}
+    .verse{font-style:italic;font-size:.85rem;color:var(--sb);opacity:.85;margin-bottom:5px;}
+    header p{font-size:.82rem;color:var(--muted);max-width:380px;margin:0 auto 22px;line-height:1.65;}
+    .iron-divider{display:flex;align-items:center;justify-content:center;gap:12px;margin:0 auto 20px;max-width:280px;}
+    .iron-line{flex:1;height:2px;background:linear-gradient(90deg,transparent,var(--steel),transparent);}
+    .iron-icon{font-size:1rem;filter:drop-shadow(0 0 5px rgba(74,127,165,.6));}
+
+    .counter{position:relative;z-index:2;text-align:center;margin-bottom:16px;
+      font-family:'Cinzel',serif;font-size:.72rem;color:rgba(214,238,248,.3);letter-spacing:2px;}
+    .counter span{color:var(--sb);}
+
+    /* GRID — 4 wide x 6 tall */
+    .bubble-grid{position:relative;z-index:2;display:grid;
+      grid-template-columns:repeat(2,1fr);gap:14px;
+      padding:0 12px 100px;max-width:1100px;margin:0 auto;}
+    @media(min-width:480px){.bubble-grid{grid-template-columns:repeat(3,1fr);gap:16px;padding:0 16px 100px;}}
+    @media(min-width:700px){.bubble-grid{grid-template-columns:repeat(4,1fr);gap:20px;padding:0 28px 100px;}}
+
+    /* CARD — no 3D flip, simple show/hide */
+    .card{
+      position:relative;
+      aspect-ratio:3/4;
+      min-height:270px;
+      border-radius:18px;
+      cursor:pointer;
+      overflow:hidden;
+    }
+
+    /* FRONT FACE */
+    .card-front{
+      position:absolute;inset:0;
+      border-radius:16px;
+      display:flex;flex-direction:column;
+      align-items:center;justify-content:space-between;
+      padding:12px 12px 10px;
+      background:linear-gradient(145deg,#0d2d42 0%,#051823 100%);
+      border:1.5px solid rgba(246,201,14,.25);
+      box-shadow:0 6px 24px rgba(2,8,13,.6);
+      transition:opacity .4s ease, transform .4s ease;
+      z-index:2;
+      overflow:hidden;
+    }
+    .card:hover .card-front{border-color:rgba(246,201,14,.5);}
+
+    /* hide front when revealed */
+    .card.revealed .card-front{
+      opacity:0;
+      pointer-events:none;
+      transform:scale(0.95);
+    }
+
+    .front-num{font-family:'Cinzel',serif;font-size:10px;font-weight:700;
+      color:rgba(246,201,14,.5);letter-spacing:1.5px;align-self:flex-start;}
+
+    .front-msg{font-family:'Nunito',sans-serif;font-style:italic;font-weight:600;
+      font-size:.95rem;color:rgba(214,238,248,.92);line-height:1.65;text-align:center;
+      flex:1;overflow-y:auto;width:100%;padding:8px 4px;
+      scrollbar-width:none;
+      /* allow text to breathe — no flex centering so long text starts from top */
+    }
+    .front-msg::-webkit-scrollbar{display:none;}
+    /* short messages stay centered, long ones scroll from top */
+    .front-msg.short{display:flex;align-items:center;justify-content:center;}
+    .front-tap{font-size:9px;color:rgba(246,201,14,.4);letter-spacing:1.5px;
+      text-transform:uppercase;font-family:'Cinzel',serif;}
+    .front-empty{font-family:'Cinzel',serif;font-size:2rem;font-weight:700;
+      color:rgba(214,238,248,.15);}
+
+    /* BACK FACE — photo fills card */
+    .card-back{
+      position:absolute;inset:0;
+      border-radius:16px;
+      overflow:hidden;
+      opacity:0;
+      transition:opacity .4s ease;
+      z-index:1;
+      background:#0a1f30;
+      border:2.5px solid rgba(246,201,14,.55);
+    }
+
+    /* show back when revealed */
+    .card.revealed .card-back{opacity:1;}
+
+    .back-photo{
+      position:absolute;
+      inset:0;
+      display:block;
+    }
+    .back-photo img{
+      width:100%;
+      height:88%;
+      display:block;
+      object-fit:cover;
+      object-position:center top;
+    }
+    .back-photo .b-init{
+      width:100%;height:88%;
+      display:flex;align-items:center;justify-content:center;
+      font-family:'Cinzel',serif;font-size:3rem;font-weight:700;
+      color:var(--sb);background:#0a1f30;
+    }
+
+    .back-info{
+      position:absolute;
+      bottom:0;left:0;right:0;
+      height:12%;
+      background:linear-gradient(transparent,rgba(2,8,13,.95));
+      display:flex;flex-direction:column;
+      align-items:center;justify-content:center;
+      padding:6px 8px;gap:2px;
+    }
+    .back-name{font-family:'Cinzel',serif;font-size:.9rem;font-weight:700;
+      color:#fff;text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;width:100%;}
+    .back-from{font-size:.65rem;font-weight:700;letter-spacing:1px;text-transform:uppercase;
+      color:var(--sb);opacity:.8;text-align:center;}
+
+    /* PROGRESS */
+    .progress-bar{position:fixed;bottom:0;left:0;right:0;z-index:50;height:4px;background:rgba(10,46,68,.6);}
+    .progress-fill{height:100%;background:linear-gradient(90deg,var(--copper),var(--sb),var(--gold2));transition:width .6s ease;}
+
+    /* ADMIN */
+    .admin-toggle{position:fixed;bottom:24px;right:24px;z-index:100;width:52px;height:52px;
+      border-radius:50%;background:linear-gradient(135deg,var(--copper),var(--sb));
+      color:var(--deep);border:none;font-size:1.3rem;cursor:pointer;
+      box-shadow:0 4px 20px rgba(246,201,14,.4);transition:transform .2s;}
+    .admin-toggle:hover{transform:scale(1.1);}
+
+    .admin-panel{position:fixed;bottom:88px;right:16px;z-index:100;
+      background:linear-gradient(160deg,#0d2d42,#071b28);
+      border:1px solid rgba(74,127,165,.35);border-radius:16px;padding:20px;
+      width:min(310px,calc(100vw - 32px));
+      box-shadow:0 20px 50px rgba(2,8,13,.9);
+      opacity:0;pointer-events:none;transform:translateY(10px);
+      transition:opacity .25s,transform .25s;max-height:85vh;overflow-y:auto;}
+    .admin-panel.open{opacity:1;pointer-events:auto;transform:translateY(0);}
+    .admin-panel h3{font-family:'Cinzel',serif;font-size:.95rem;color:var(--sb);margin-bottom:14px;letter-spacing:1px;}
+    .aselect{width:100%;background:rgba(5,24,35,.9);border:1px solid rgba(74,127,165,.3);
+      color:var(--foam);border-radius:8px;padding:10px;font-family:'Nunito',sans-serif;
+      font-size:.88rem;margin-bottom:12px;outline:none;}
+    .af{margin-bottom:10px;}
+    .af label{display:block;font-size:.68rem;color:rgba(214,238,248,.4);
+      letter-spacing:1.5px;text-transform:uppercase;margin-bottom:5px;}
+    .af input,.af textarea{width:100%;background:rgba(5,24,35,.9);
+      border:1px solid rgba(74,127,165,.25);color:var(--foam);border-radius:8px;
+      padding:9px 11px;font-family:'Nunito',sans-serif;font-size:.88rem;outline:none;transition:border-color .2s;}
+    .af input:focus,.af textarea:focus{border-color:var(--sb);}
+    .af textarea{resize:vertical;min-height:80px;}
+    .photo-row{display:flex;align-items:center;gap:10px;margin-bottom:12px;}
+    .a-thumb{width:52px;height:52px;border-radius:8px;background:rgba(5,24,35,.8);
+      border:2px solid rgba(74,127,165,.4);overflow:hidden;
+      display:flex;align-items:center;justify-content:center;font-size:22px;flex-shrink:0;}
+    .a-thumb img{width:100%;height:100%;object-fit:cover;display:block;}
+    .upload-lbl{font-size:.85rem;color:var(--sb);cursor:pointer;font-weight:700;
+      padding:8px 14px;border:1px solid rgba(246,201,14,.4);border-radius:8px;}
+    .upload-lbl:hover{background:rgba(246,201,14,.1);}
+    #admin-photo-input{display:none;}
+    .photo-status{font-size:.72rem;color:rgba(123,198,126,.8);margin-top:4px;min-height:16px;}
+    .admin-save{width:100%;padding:12px;background:linear-gradient(135deg,var(--copper),var(--sb));
+      color:var(--deep);border:none;border-radius:10px;font-family:'Cinzel',serif;
+      font-weight:700;font-size:.9rem;letter-spacing:1px;cursor:pointer;transition:opacity .2s;}
+    .admin-save:hover{opacity:.88;}
+
+    footer{position:relative;z-index:2;text-align:center;padding:16px 24px 16px;
+      font-family:'Cinzel',serif;font-size:.7rem;letter-spacing:2px;color:rgba(214,238,248,.12);}
+  </style>
+</head>
+<body>
+<div class="bg-bubbles" id="bg-bubbles"></div>
+<div class="rays"></div>
+<div class="setup-badge">⚙ SETUP MODE</div>
+
+<header>
+  <div class="verse-tag">Proverbs 27:17 · ACS(I) 2026</div>
+  <h1>Gratitude<br>Blockchain</h1>
+  <p class="verse">"As iron sharpens iron, so one person sharpens another."</p>
+  <p>Read the message. Tap to reveal who it's from. 💛</p>
+  <div class="iron-divider">
+    <div class="iron-line"></div><div class="iron-icon">⚓</div><div class="iron-line"></div>
+  </div>
+</header>
+
+<div class="counter"><span id="opened-count">0</span> of <span id="total-count">24</span> revealed</div>
+<div class="bubble-grid" id="main-grid"></div>
+<footer>IRON SHARPENS IRON · CLASS OF 2026 · ACS(I)</footer>
+<div class="progress-bar"><div class="progress-fill" id="progress-fill"></div></div>
+
+<button class="admin-toggle" onclick="toggleAdmin()">✎</button>
+<div class="admin-panel" id="admin-panel">
+  <h3>⚓ Edit Card</h3>
+  <button id="backup-toggle" onclick="toggleBackup()" style="
+    width:100%;padding:8px;margin-bottom:12px;
+    background:rgba(200,121,65,.3);border:1px solid rgba(200,121,65,.6);
+    color:#c87941;border-radius:8px;font-weight:700;cursor:pointer;
+    font-family:'Nunito',sans-serif;font-size:.82rem;
+  ">💾 BACKUP</button>
+  <select class="aselect" id="admin-select" onchange="loadAdminCard()">
+    <option value="">— choose card —</option>
+  </select>
+  <div class="af"><label>Name (shown on back)</label>
+    <input type="text" id="admin-name" placeholder="e.g. Kai Lim"/></div>
+  <div class="af"><label>Gratitude Message (front)</label>
+    <textarea id="admin-msg" placeholder="Write the message here…"></textarea></div>
+  <div class="af"><label>Written by</label>
+    <input type="text" id="admin-from" placeholder="e.g. Priya S."/></div>
+  <div class="af">
+    <label>Photo</label>
+    <div class="photo-row">
+      <div class="a-thumb" id="admin-thumb">🧑</div>
+      <label class="upload-lbl" for="admin-photo-input">📷 Choose Photo</label>
+      <input type="file" id="admin-photo-input" accept="image/*" onchange="handleAdminPhoto(event)"/>
+    </div>
+    <div class="photo-status" id="photo-status"></div>
+  </div>
+  <button class="admin-save" onclick="saveAdminCard()">SAVE CARD</button>
+</div>
+
+<!-- BACKUP UI -->
+<div id="backup-section" style="
+  position:fixed;bottom:88px;left:16px;z-index:100;
+  background:linear-gradient(160deg,#0d2d42,#071b28);
+  border:1px solid rgba(74,127,165,.35);border-radius:16px;padding:20px;
+  width:min(310px,calc(100vw - 32px));
+  box-shadow:0 20px 50px rgba(2,8,13,.9);
+  opacity:0;pointer-events:none;transform:translateY(10px);
+  transition:opacity .25s,transform .25s;
+  display:none;
+">
+  <h3 style="font-family:'Cinzel',serif;font-size:.95rem;color:var(--sb);margin-bottom:14px;letter-spacing:1px;">💾 BACKUP & RESTORE</h3>
+  <button onclick="exportGBChain()" style="
+    width:100%;padding:10px;margin-bottom:10px;
+    background:linear-gradient(135deg,#c87941,#f6c90e);color:#051823;
+    border:none;border-radius:8px;font-weight:700;cursor:pointer;
+    font-family:'Nunito',sans-serif;font-size:.9rem;
+  ">⬇️ DOWNLOAD BACKUP</button>
+  <p style="font-size:.8rem;color:rgba(214,238,248,.5);margin:10px 0;text-align:center;">Restore from file:</p>
+  <div id="import-area" style="
+    border:2px dashed rgba(74,127,165,.5);border-radius:8px;padding:12px;
+    text-align:center;cursor:pointer;font-size:.85rem;color:rgba(214,238,248,.7);
+    transition:border-color .2s;
+  ">
+    📂 Tap to choose backup
+  </div>
+  <input type="file" id="import-file-input" accept=".json" style="display:none;">
+  <p id="import-status" style="font-size:.75rem;color:var(--sb);margin-top:10px;text-align:center;"></p>
+</div>
+
+<script>
+const STUDENT_COUNT = 21;
+const TEACHER_COUNT = 3;
+const TOTAL = STUDENT_COUNT + TEACHER_COUNT;
+const STORE_KEY = 'gb_iron_v3';
+
+const DEFAULT = Array.from({length:TOTAL},(_,i)=>({
+  id:i+1,name:'',from:'',message:'',photo:null,revealed:false,isTeacher:i>=STUDENT_COUNT
+}));
+
+let cards=[];
+let pendingAdminPhoto=null;
+let currentAdminIdx=null;
+let storage=null;
+
+function load(){
+  try{
+    const saved=localStorage.getItem(STORE_KEY);
+    if(saved){
+      const p=JSON.parse(saved);
+      cards=DEFAULT.map((d,i)=>p[i]?{...d,...p[i],isTeacher:i>=STUDENT_COUNT}:d);
+    } else { cards=DEFAULT.map(d=>({...d})); }
+  } catch(e){ cards=DEFAULT.map(d=>({...d})); }
+  
+  // Initialize StorageManager for export/import
+  storage = new StorageManager('GratitudeBlockchain', cards);
+}
+
+function save(){
+  try{ 
+    localStorage.setItem(STORE_KEY,JSON.stringify(cards)); 
+    if(storage) storage.save();
+  }
+  catch(e){ alert('Storage full! Photos may be too large.'); }
+}
+
+function spawnBgBubbles(){
+  const c=document.getElementById('bg-bubbles');
+  for(let i=0;i<14;i++){
+    const b=document.createElement('div');b.className='bg-bubble';
+    const sz=8+Math.random()*32;
+    b.style.cssText=`width:${sz}px;height:${sz}px;left:${Math.random()*100}%;animation-duration:${14+Math.random()*16}s;animation-delay:-${Math.random()*22}s;`;
+    c.appendChild(b);
+  }
+}
+
+function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+function initials(n){if(!n)return'?';return n.trim().split(' ').map(w=>w[0]).join('').toUpperCase().slice(0,2);}
+
+function render(){
+  const grid=document.getElementById('main-grid');
+  grid.innerHTML='';
+  const filled=cards.filter(c=>c.name).length;
+  const revealed=cards.filter(c=>c.revealed&&c.name).length;
+  document.getElementById('opened-count').textContent=revealed;
+  document.getElementById('total-count').textContent=filled||TOTAL;
+  document.getElementById('progress-fill').style.width=filled?`${(revealed/filled)*100}%`:'0%';
+
+  cards.forEach((card,i)=>{
+    const el=document.createElement('div');
+    el.className='card'+(card.revealed?' revealed':'');
+
+    const numLabel=`#${String(i+1).padStart(2,'0')}`;
+
+    // FRONT
+    const msgLen = (card.message||'').length;
+    const msgClass = msgLen < 120 ? 'front-msg short' : 'front-msg';
+    const frontHTML=card.message
+      ?`<div class="front-num">${numLabel}</div>
+        <div class="${msgClass}">"${esc(card.message)}"</div>
+        <div class="front-tap">tap to reveal ↓</div>`
+      :`<div class="front-empty">${i+1}</div>`;
+
+    // BACK — photo or initials
+    const photoHTML=card.photo
+      ?`<img src="${card.photo}" alt="${esc(card.name)}">`
+      :`<div class="b-init">${initials(card.name)}</div>`;
+
+    el.innerHTML=`
+      <div class="card-front">${frontHTML}</div>
+      <div class="card-back">
+        <div class="back-photo">${photoHTML}</div>
+        <div class="back-info">
+          <div class="back-name">${esc(card.name)||'—'}</div>
+          ${card.from?`<div class="back-from">from ${esc(card.from)}</div>`:''}
+        </div>
+      </div>`;
+
+    if(card.name||card.message){
+      el.addEventListener('click',()=>tapCard(i));
+    }
+    grid.appendChild(el);
+  });
+  populateAdminSelect();
+}
+
+function tapCard(i){
+  cards[i].revealed=!cards[i].revealed;
+  save(); render();
+}
+
+// ADMIN
+function toggleAdmin(){document.getElementById('admin-panel').classList.toggle('open');}
+
+function populateAdminSelect(){
+  const sel=document.getElementById('admin-select');
+  const cur=sel.value;
+  sel.innerHTML='<option value="">— choose card —</option>';
+  cards.forEach((c,i)=>{
+    const opt=document.createElement('option');
+    opt.value=i;
+    opt.textContent=`${c.isTeacher?'👨‍🏫':'👤'} #${i+1} ${c.name||'(empty)'}`;
+    sel.appendChild(opt);
+  });
+  if(cur!=='')sel.value=cur;
+}
+
+function loadAdminCard(){
+  const idx=document.getElementById('admin-select').value;
+  if(idx==='')return;
+  currentAdminIdx=parseInt(idx);
+  const c=cards[currentAdminIdx];
+  document.getElementById('admin-name').value=c.name||'';
+  document.getElementById('admin-msg').value=c.message||'';
+  document.getElementById('admin-from').value=c.from||'';
+  pendingAdminPhoto=c.photo||null;
+  document.getElementById('photo-status').textContent=c.photo?'✓ Photo loaded':'';
+  if(c.photo){
+    document.getElementById('admin-thumb').innerHTML=`<img src="${c.photo}" alt=""/>`;
+  } else {
+    document.getElementById('admin-thumb').textContent='🧑';
+  }
+}
+
+function handleAdminPhoto(e){
+  const file=e.target.files[0];
+  if(!file)return;
+  document.getElementById('photo-status').textContent='⏳ Processing...';
+  const reader=new FileReader();
+  reader.onload=function(ev){
+    const img=new Image();
+    img.onload=function(){
+      const canvas=document.createElement('canvas');
+      const MAX=500;
+      let w=img.width,h=img.height;
+      if(w>h){if(w>MAX){h=Math.round(h*MAX/w);w=MAX;}}
+      else{if(h>MAX){w=Math.round(w*MAX/h);h=MAX;}}
+      canvas.width=w;canvas.height=h;
+      const ctx=canvas.getContext('2d');
+      ctx.drawImage(img,0,0,w,h);
+      pendingAdminPhoto=canvas.toDataURL('image/jpeg',0.8);
+      // Show thumb
+      document.getElementById('admin-thumb').innerHTML=`<img src="${pendingAdminPhoto}" alt=""/>`;
+      document.getElementById('photo-status').textContent='✓ Photo ready — click SAVE CARD';
+    };
+    img.onerror=function(){
+      document.getElementById('photo-status').textContent='❌ Could not load image';
+    };
+    img.src=ev.target.result;
+  };
+  reader.onerror=function(){
+    document.getElementById('photo-status').textContent='❌ Could not read file';
+  };
+  reader.readAsDataURL(file);
+}
+
+function saveAdminCard(){
+  if(currentAdminIdx===null){alert('Select a card first.');return;}
+  const name=document.getElementById('admin-name').value.trim();
+  const msg=document.getElementById('admin-msg').value.trim();
+  const from=document.getElementById('admin-from').value.trim();
+  if(!name||!msg){alert('Name and message are required.');return;}
+  cards[currentAdminIdx]={
+    ...cards[currentAdminIdx],
+    name,message:msg,from,
+    photo:pendingAdminPhoto||null
+  };
+  save();
+  render();
+  document.getElementById('photo-status').textContent='';
+  const btn=document.querySelector('.admin-save');
+  btn.textContent='✓ SAVED!';
+  setTimeout(()=>btn.textContent='SAVE CARD',1400);
+}
+
+// BACKUP & EXPORT/IMPORT
+function toggleBackup(){
+  const section=document.getElementById('backup-section');
+  if(section.style.display==='none'){
+    section.style.display='block';
+    setTimeout(()=>{section.style.opacity='1';section.style.pointerEvents='auto';section.style.transform='translateY(0)';},10);
+  } else {
+    section.style.opacity='0';section.style.pointerEvents='none';section.style.transform='translateY(10px)';
+    setTimeout(()=>section.style.display='none',250);
+  }
+}
+
+function exportGBChain(){
+  if(!storage)return;
+  const result=storage.export();
+  if(result.success){
+    const msg=document.getElementById('import-status');
+    msg.textContent='✓ Downloaded: '+result.filename;
+    msg.style.color='#7bc67e';
+  } else {
+    const msg=document.getElementById('import-status');
+    msg.textContent='❌ '+result.error;
+    msg.style.color='#ff6b6b';
+  }
+}
+
+async function importGBChain(){
+  const file=document.getElementById('import-file-input').files[0];
+  if(!file)return;
+  
+  const msg=document.getElementById('import-status');
+  msg.textContent='⏳ Restoring...';
+  msg.style.color='var(--sb)';
+  
+  const result=await storage.import(file);
+  if(result.success){
+    msg.textContent=`✓ Restored ${result.itemsRestored} cards!`;
+    msg.style.color='#7bc67e';
+    document.getElementById('import-file-input').value='';
+    setTimeout(()=>{
+      cards=storage.dataStructure;
+      save();
+      render();
+      alert('✅ Chain restored! Reload the page to see changes.');
+    },1000);
+  } else {
+    msg.textContent='❌ '+result.error;
+    msg.style.color='#ff6b6b';
+  }
+}
+
+// Wire up import file input
+document.addEventListener('DOMContentLoaded',()=>{
+  const importArea=document.getElementById('import-area');
+  const importInput=document.getElementById('import-file-input');
+  if(importArea && importInput){
+    importArea.addEventListener('click',()=>importInput.click());
+    importInput.addEventListener('change',importGBChain);
+  }
+});
+
+document.addEventListener('keydown',e=>{
+  if(e.key==='Escape'){
+    document.getElementById('admin-panel').classList.remove('open');
+    const backup=document.getElementById('backup-section');
+    if(backup && backup.style.display!=='none') toggleBackup();
+  }
+});
+
+spawnBgBubbles();
+load();
+render();
+</script>
+</body>
+</html>
